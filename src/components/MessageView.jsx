@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSubscription, useMutation } from '@apollo/client';
-import { MESSAGES_SUBSCRIPTION, INSERT_USER_MESSAGE, SEND_MESSAGE_ACTION } from '../graphql/queries';
+import { MESSAGES_SUBSCRIPTION, INSERT_USER_MESSAGE, SEND_MESSAGE_ACTION, UPDATE_CHAT_TITLE } from '../graphql/queries';
 
 const MessageView = ({ selectedChatId }) => {
   const [message, setMessage] = useState('');
@@ -12,6 +12,10 @@ const MessageView = ({ selectedChatId }) => {
 
   const [insertUserMessage] = useMutation(INSERT_USER_MESSAGE);
   const [sendMessageAction] = useMutation(SEND_MESSAGE_ACTION);
+  // This is the new mutation to update our title
+  const [updateChatTitle] = useMutation(UPDATE_CHAT_TITLE, {
+    refetchQueries: ['GetChats'] // This makes the sidebar update instantly
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -19,15 +23,27 @@ const MessageView = ({ selectedChatId }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!message.trim() || !selectedChatId) return;
-    insertUserMessage({ variables: { chat_id: selectedChatId, message } });
-    sendMessageAction({ variables: { chat_id: selectedChatId, message } });
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || !selectedChatId) return;
+
+    // This is the new logic:
+    // If this is the very first message of the chat...
+    if (data?.messages.length === 0) {
+      // ...create a title from the first 4 words...
+      const newTitle = trimmedMessage.split(' ').slice(0, 4).join(' ');
+      // ...and save it to the database.
+      updateChatTitle({ variables: { chat_id: selectedChatId, title: newTitle } });
+    }
+
+    insertUserMessage({ variables: { chat_id: selectedChatId, message: trimmedMessage } });
+    sendMessageAction({ variables: { chat_id: selectedChatId, message: trimmedMessage } });
     setMessage('');
   };
 
   if (!selectedChatId) {
     return (<div className="flex-grow flex items-center justify-center text-gray-500"><p className="text-lg">Select a chat to start.</p></div>);
   }
+
   return (
     <>
       <div className="flex-grow p-6 overflow-y-auto">
@@ -53,4 +69,5 @@ const MessageView = ({ selectedChatId }) => {
     </>
   );
 };
+
 export default MessageView;
